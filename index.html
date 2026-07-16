@@ -31,7 +31,8 @@ select,button{border:1px solid var(--line);background:var(--soft);color:var(--te
 <div class="controls">
 <button class="primary" id="showAnswer">정답 보기</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button>
 <label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
-<label class="toggle"><input type="checkbox" id="autoPlay"> 자동 진행</label><select id="delay"><option value="2000">2초</option><option value="3000" selected="">3초</option><option value="5000">5초</option></select>
+<label class="toggle"><input type="checkbox" id="autoPlay"> 자동 진행</label><select id="delay"><option value="2000">2초</option><option value="3000" selected="">3초</option><option value="5000">5초</option>
+<option value="10">10초</option></select>
 </div>
 <div class="history-head"><span>이전 단어 (최근 0 / 20)</span><button id="clearHistory" style="padding:4px 9px">비우기</button></div><div class="history" id="history">아직 히스토리가 없어. ‘다음’을 눌러 진행해 봐.</div>
 </section></main>
@@ -66,7 +67,12 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function rebuild(x=true){deck=activeWords();if(x)shuffle(deck);index=0;shown=false;render()}
 function current(){return deck[index]||null}
 function koreanMeaning(answerText){const m=answerText.match(/\((.*?)\)/);return m?m[1]:answerText}
-function render(){clearTimeout(timer);const w=current();$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${w[2]}`:w[2];$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}`;updateHistory();if($("autoPlay").checked&&shown)timer=setTimeout(nextWord,Number($("delay").value))}
+function render(){clearTimeout(timer);const w=current();$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${w[2]}`:w[2];$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}`;updateHistory();if($("autoPlay").checked){
+  timer=setTimeout(()=>{
+    if(shown) nextWord();
+    else toggleAnswer();
+  },Number($("delay").value));
+}}
 function toggleAnswer(){shown=!shown;render()}
 function nextWord(){const w=current();if(w){history.unshift(w[0]);history=history.slice(0,20)}index=deck.length?(index+1)%deck.length:0;shown=false;render()}
 function updateHistory(){document.querySelector(".history-head span").textContent=`이전 단어 (최근 ${history.length} / 20)`;$("history").innerHTML=history.length?history.map(x=>`<span class="chip">${x}</span>`).join(""):"아직 히스토리가 없어. ‘다음’을 눌러 진행해 봐."}
