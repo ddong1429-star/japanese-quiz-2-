@@ -33,6 +33,8 @@ select,button{border:1px solid var(--line);background:var(--soft);color:var(--te
 <label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
 <label class="toggle"><input type="checkbox" id="autoPlay"> 자동 진행</label><select id="delay"><option value="2000">2초</option><option value="3000" selected="">3초</option><option value="5000">5초</option>
 <option value="10000">10초</option></select>
+<label class="toggle"><input type="checkbox" id="ttsEnabled"> TTS 읽기</label>
+<select id="ttsRate"><option value="0.8">0.8배</option><option value="1" selected>1.0배</option><option value="1.2">1.2배</option></select>
 </div>
 <div class="history-head"><span>이전 단어 (최근 0 / 20)</span><button id="clearHistory" style="padding:4px 9px">비우기</button></div><div class="history" id="history">아직 히스토리가 없어. ‘다음’을 눌러 진행해 봐.</div>
 </section></main>
@@ -43,6 +45,32 @@ let words = [];
 let favorites = new Set(JSON.parse(localStorage.getItem("jpQuizFavs_txt_v2") || "[]"));
 let deck = [], index = 0, shown = false, history = [], timer = null;
 const $ = id => document.getElementById(id);
+
+const TTS_ENABLED_KEY="jpQuizTtsEnabled_v1";
+const TTS_RATE_KEY="jpQuizTtsRate_v1";
+let lastSpokenToken="";
+
+function getJapaneseVoice(){
+  const voices=speechSynthesis.getVoices();
+  return voices.find(v=>/^ja[-_]/i.test(v.lang)&&/Google|Microsoft|Kyoko|Haruka|Otoya|Nanami/i.test(v.name))
+      || voices.find(v=>/^ja[-_]/i.test(v.lang))
+      || null;
+}
+function stopSpeech(){if("speechSynthesis" in window)speechSynthesis.cancel()}
+function speakCurrent(force=false){
+  if(!("speechSynthesis" in window)||!$("ttsEnabled").checked)return;
+  const w=current(); if(!w)return;
+  const token=`${index}:${w[0]}:${w[1]}`;
+  if(!force&&token===lastSpokenToken)return;
+  stopSpeech();
+  const u=new SpeechSynthesisUtterance(w[1]||w[0]);
+  u.lang="ja-JP";
+  u.rate=Number($("ttsRate").value||1);
+  const voice=getJapaneseVoice(); if(voice)u.voice=voice;
+  lastSpokenToken=token;
+  speechSynthesis.speak(u);
+}
+
 
 async function loadWords() {
   const response = await fetch("words.txt?v=1123-2", { cache: "no-store" });
@@ -67,7 +95,7 @@ function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random
 function rebuild(x=true){deck=activeWords();if(x)shuffle(deck);index=0;shown=false;render()}
 function current(){return deck[index]||null}
 function koreanMeaning(answerText){const m=answerText.match(/\((.*?)\)/);return m?m[1]:answerText}
-function render(){clearTimeout(timer);const w=current();$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${w[2]}`:w[2];$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}`;updateHistory();if($("autoPlay").checked){
+function render(){clearTimeout(timer);const w=current();$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${w[2]}`:w[2];$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
   timer=setTimeout(()=>{
     if(shown) nextWord();
     else toggleAnswer();
@@ -76,18 +104,22 @@ function render(){clearTimeout(timer);const w=current();$("partInfo").textConten
 function toggleAnswer(){shown=!shown;render()}
 function previousWord(){
   if(!deck.length) return;
+  stopSpeech();
   index=(index-1+deck.length)%deck.length;
   shown=false;
+  lastSpokenToken="";
   render();
 }
-function nextWord(){const w=current();if(w){history.unshift(w[0]);history=history.slice(0,20)}index=deck.length?(index+1)%deck.length:0;shown=false;render()}
+function nextWord(){stopSpeech();const w=current();if(w){history.unshift(w[0]);history=history.slice(0,20)}index=deck.length?(index+1)%deck.length:0;shown=false;lastSpokenToken="";render()}
 function updateHistory(){document.querySelector(".history-head span").textContent=`이전 단어 (최근 ${history.length} / 20)`;$("history").innerHTML=history.length?history.map(x=>`<span class="chip">${x}</span>`).join(""):"아직 히스토리가 없어. ‘다음’을 눌러 진행해 봐."}
 function toggleFavorite(){const w=current();if(!w)return;favorites.has(w[0])?favorites.delete(w[0]):favorites.add(w[0]);localStorage.setItem("jpQuizFavs_txt_v2",JSON.stringify([...favorites]));$("favOnly").checked?rebuild(false):render()}
 function applyDark(on){document.body.classList.toggle("dark",on);localStorage.setItem("jpQuizDark_txt_v2",on?"1":"0")}
 function openEditor(){$("wordInput").value=words.map(w=>w.join(" | ")).join("\n");$("editor").classList.add("open")}
 function saveWords(){const p=$("wordInput").value.split("\n").map(x=>x.trim()).filter(Boolean).map(x=>x.split("|").map(y=>y.trim())).filter(x=>x.length>=3&&x[0]&&x[1]&&x[2]).map(x=>[x[0],x[1],x.slice(2).join(" | ")]);if(!p.length){alert("올바른 단어가 없어.");return}words=p;buildPartOptions();$("editor").classList.remove("open");rebuild(true);alert("이 기기에서만 임시 적용됐어. 모든 기기에 적용하려면 GitHub의 words.txt를 수정해야 해.")}
 
-$("showAnswer").onclick=toggleAnswer;$("card").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
+$("showAnswer").onclick=toggleAnswer;$("card").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;
+$("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.checked?"1":"0");lastSpokenToken="";if(e.target.checked)speakCurrent(true);else stopSpeech()};
+$("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
   if(e.repeat) return;
   if($("editor").classList.contains("open")) return;
@@ -116,6 +148,10 @@ document.addEventListener("keydown",e=>{
   }
 });
 const ds=localStorage.getItem("jpQuizDark_txt_v2")==="1";$("darkMode").checked=ds;applyDark(ds);
+$("ttsEnabled").checked=localStorage.getItem(TTS_ENABLED_KEY)==="1";
+const savedRate=localStorage.getItem(TTS_RATE_KEY);
+if(savedRate&&[...$("ttsRate").options].some(o=>o.value===savedRate))$("ttsRate").value=savedRate;
+if("speechSynthesis" in window){speechSynthesis.getVoices();speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices()}
 loadWords().catch(error=>{console.error(error);$("question").textContent="불러오기 실패";$("answer").textContent="words.txt 파일이 index.html과 같은 위치에 있는지 확인해.";$("answer").classList.remove("hidden")});
 </script>
 </body></html>
