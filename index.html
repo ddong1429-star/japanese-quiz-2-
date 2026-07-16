@@ -26,10 +26,10 @@ select,button{border:1px solid var(--line);background:var(--soft);color:var(--te
 <main><section class="wrap">
 <h1>일본어 단어 랜덤 퀴즈</h1>
 <div class="toolbar"><strong>학습 범위</strong><select id="partSelect"><option value="all">전체 (1123개)</option><option value="0">파트 1 (1~100)</option><option value="1">파트 2 (101~200)</option><option value="2">파트 3 (201~300)</option><option value="3">파트 4 (301~400)</option><option value="4">파트 5 (401~500)</option><option value="5">파트 6 (501~600)</option><option value="6">파트 7 (601~700)</option><option value="7">파트 8 (701~800)</option><option value="8">파트 9 (801~900)</option><option value="9">파트 10 (901~1000)</option><option value="10">파트 11 (1001~1100)</option><option value="11">파트 12 (1101~1123)</option></select><span id="partInfo">현재 범위 1123개</span></div>
-<div class="meta"><span id="progress">1 / 1123　★0</span><span>Space: 정답 / Enter: 다음 / S: 섞기 / R: 앞뒤 / D: 다크</span></div>
+<div class="meta"><span id="progress">1 / 1123　★0</span><span>Space: 정답 / Enter·→: 다음 / ←·Backspace: 이전 / S: 섞기 / R: 앞뒤 / D: 다크</span></div>
 <div class="card" id="card"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">렌라쿠 (연락)[이을 련/이을 락]</div></div>
 <div class="controls">
-<button class="primary" id="showAnswer">정답 보기</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button>
+<button class="primary" id="showAnswer">정답 보기</button><button id="prevBtn">이전</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button>
 <label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
 <label class="toggle"><input type="checkbox" id="autoPlay"> 자동 진행</label><select id="delay"><option value="2000">2초</option><option value="3000" selected="">3초</option><option value="5000">5초</option>
 <option value="10000">10초</option></select>
@@ -74,6 +74,12 @@ function render(){clearTimeout(timer);const w=current();$("partInfo").textConten
   },Number($("delay").value));
 }}
 function toggleAnswer(){shown=!shown;render()}
+function previousWord(){
+  if(!deck.length) return;
+  index=(index-1+deck.length)%deck.length;
+  shown=false;
+  render();
+}
 function nextWord(){const w=current();if(w){history.unshift(w[0]);history=history.slice(0,20)}index=deck.length?(index+1)%deck.length:0;shown=false;render()}
 function updateHistory(){document.querySelector(".history-head span").textContent=`이전 단어 (최근 ${history.length} / 20)`;$("history").innerHTML=history.length?history.map(x=>`<span class="chip">${x}</span>`).join(""):"아직 히스토리가 없어. ‘다음’을 눌러 진행해 봐."}
 function toggleFavorite(){const w=current();if(!w)return;favorites.has(w[0])?favorites.delete(w[0]):favorites.add(w[0]);localStorage.setItem("jpQuizFavs_txt_v2",JSON.stringify([...favorites]));$("favOnly").checked?rebuild(false):render()}
@@ -81,7 +87,7 @@ function applyDark(on){document.body.classList.toggle("dark",on);localStorage.se
 function openEditor(){$("wordInput").value=words.map(w=>w.join(" | ")).join("\n");$("editor").classList.add("open")}
 function saveWords(){const p=$("wordInput").value.split("\n").map(x=>x.trim()).filter(Boolean).map(x=>x.split("|").map(y=>y.trim())).filter(x=>x.length>=3&&x[0]&&x[1]&&x[2]).map(x=>[x[0],x[1],x.slice(2).join(" | ")]);if(!p.length){alert("올바른 단어가 없어.");return}words=p;buildPartOptions();$("editor").classList.remove("open");rebuild(true);alert("이 기기에서만 임시 적용됐어. 모든 기기에 적용하려면 GitHub의 words.txt를 수정해야 해.")}
 
-$("showAnswer").onclick=toggleAnswer;$("card").onclick=toggleAnswer;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
+$("showAnswer").onclick=toggleAnswer;$("card").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
   if(e.repeat) return;
   if($("editor").classList.contains("open")) return;
@@ -90,6 +96,12 @@ document.addEventListener("keydown",e=>{
     e.preventDefault();
     toggleAnswer();
   }else if(e.key==="Enter"){
+    e.preventDefault();
+    nextWord();
+  }else if(e.key==="ArrowLeft" || e.key==="Backspace"){
+    e.preventDefault();
+    previousWord();
+  }else if(e.key==="ArrowRight"){
     e.preventDefault();
     nextWord();
   }else if(e.key.toLowerCase()==="s"){
