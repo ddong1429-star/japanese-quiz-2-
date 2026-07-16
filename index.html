@@ -82,7 +82,27 @@ function openEditor(){$("wordInput").value=words.map(w=>w.join(" | ")).join("\n"
 function saveWords(){const p=$("wordInput").value.split("\n").map(x=>x.trim()).filter(Boolean).map(x=>x.split("|").map(y=>y.trim())).filter(x=>x.length>=3&&x[0]&&x[1]&&x[2]).map(x=>[x[0],x[1],x.slice(2).join(" | ")]);if(!p.length){alert("올바른 단어가 없어.");return}words=p;buildPartOptions();$("editor").classList.remove("open");rebuild(true);alert("이 기기에서만 임시 적용됐어. 모든 기기에 적용하려면 GitHub의 words.txt를 수정해야 해.")}
 
 $("showAnswer").onclick=toggleAnswer;$("card").onclick=toggleAnswer;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
-document.addEventListener("keydown",e=>{if($("editor").classList.contains("open"))return;if(e.code==="Space"){e.preventDefault();toggleAnswer()}else if(e.key==="Enter")nextWord();else if(e.key.toLowerCase()==="s")rebuild(true);else if(e.key.toLowerCase()==="r"){$("reverse").checked=!$("reverse").checked;shown=false;render()}else if(e.key.toLowerCase()==="d"){$("darkMode").checked=!$("darkMode").checked;applyDark($("darkMode").checked)}});
+document.addEventListener("keydown",e=>{
+  if(e.repeat) return;
+  if($("editor").classList.contains("open")) return;
+
+  if(e.code==="Space"){
+    e.preventDefault();
+    toggleAnswer();
+  }else if(e.key==="Enter"){
+    e.preventDefault();
+    nextWord();
+  }else if(e.key.toLowerCase()==="s"){
+    rebuild(true);
+  }else if(e.key.toLowerCase()==="r"){
+    $("reverse").checked=!$("reverse").checked;
+    shown=false;
+    render();
+  }else if(e.key.toLowerCase()==="d"){
+    $("darkMode").checked=!$("darkMode").checked;
+    applyDark($("darkMode").checked);
+  }
+});
 const ds=localStorage.getItem("jpQuizDark_txt_v2")==="1";$("darkMode").checked=ds;applyDark(ds);
 loadWords().catch(error=>{console.error(error);$("question").textContent="불러오기 실패";$("answer").textContent="words.txt 파일이 index.html과 같은 위치에 있는지 확인해.";$("answer").classList.remove("hidden")});
 </script>
