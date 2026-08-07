@@ -13,8 +13,8 @@ main{min-height:calc(100vh - 60px);display:flex;align-items:center;justify-conte
 .toolbar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;margin-bottom:14px}
 select,button{border:1px solid var(--line);background:var(--soft);color:var(--text);border-radius:13px;padding:10px 14px;font-weight:750;cursor:pointer}
 .meta{display:flex;justify-content:space-between;gap:12px;color:var(--muted);font-size:13px;margin-bottom:12px;flex-wrap:wrap}
-.card{background:var(--card);border:1px solid var(--line);border-radius:22px;min-height:210px;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;cursor:pointer;user-select:none}
-.word{font-size:54px;font-weight:900}.answer{margin-top:14px;font-size:21px;font-weight:800;line-height:1.55;color:var(--answer)}.hidden{display:none}
+.card{background:var(--card);border:1px solid var(--line);border-radius:22px;min-height:210px;box-shadow:var(--shadow);display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:28px;cursor:pointer;user-select:text;-webkit-user-select:text}
+.word{font-size:54px;font-weight:900;user-select:text;-webkit-user-select:text;cursor:text}.answer{margin-top:14px;font-size:21px;font-weight:800;line-height:1.55;color:var(--answer)}.hidden{display:none}
 .controls{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:16px}.primary{background:var(--primary);color:#fff;border-color:transparent}.darkbtn{background:#111827;color:#fff;border-color:transparent}
 .active{outline:3px solid rgba(91,61,245,.18);background:#e8e3ff;color:#3f26cd}label.toggle{display:flex;align-items:center;gap:7px;font-size:13px}input[type=checkbox]{width:16px;height:16px}
 .history-head{display:flex;justify-content:space-between;margin-top:20px;font-size:13px;font-weight:800}.history{margin-top:8px;border:1px solid var(--line);background:var(--card);border-radius:13px;padding:12px 14px;min-height:48px;color:var(--muted);font-size:13px;display:flex;flex-wrap:wrap;gap:8px}.chip{border:1px solid var(--line);background:var(--soft);border-radius:999px;padding:6px 10px;color:var(--text)}
@@ -117,7 +117,18 @@ function applyDark(on){document.body.classList.toggle("dark",on);localStorage.se
 function openEditor(){$("wordInput").value=words.map(w=>w.join(" | ")).join("\n");$("editor").classList.add("open")}
 function saveWords(){const p=$("wordInput").value.split("\n").map(x=>x.trim()).filter(Boolean).map(x=>x.split("|").map(y=>y.trim())).filter(x=>x.length>=3&&x[0]&&x[1]&&x[2]).map(x=>[x[0],x[1],x.slice(2).join(" | ")]);if(!p.length){alert("올바른 단어가 없어.");return}words=p;buildPartOptions();$("editor").classList.remove("open");rebuild(true);alert("이 기기에서만 임시 적용됐어. 모든 기기에 적용하려면 GitHub의 words.txt를 수정해야 해.")}
 
-$("showAnswer").onclick=toggleAnswer;$("card").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;
+$("showAnswer").onclick=toggleAnswer;
+
+let cardPointerDownX=0, cardPointerDownY=0;
+$("card").addEventListener("pointerdown",e=>{
+  cardPointerDownX=e.clientX;
+  cardPointerDownY=e.clientY;
+});
+$("card").addEventListener("pointerup",e=>{
+  const moved=Math.hypot(e.clientX-cardPointerDownX,e.clientY-cardPointerDownY);
+  const selected=window.getSelection()?.toString().trim();
+  if(moved<5&&!selected)toggleAnswer();
+});$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favOnly").onchange=()=>rebuild(true);$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;
 $("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.checked?"1":"0");lastSpokenToken="";if(e.target.checked)speakCurrent(true);else stopSpeech()};
 $("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
