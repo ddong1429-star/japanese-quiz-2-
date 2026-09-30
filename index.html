@@ -28,7 +28,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <h1>일본어 단어 랜덤 퀴즈</h1>
 <div class="toolbar"><strong>학습 범위</strong><select id="partSelect"><option value="all">전체 (1123개)</option><option value="0">파트 1 (1~100)</option><option value="1">파트 2 (101~200)</option><option value="2">파트 3 (201~300)</option><option value="3">파트 4 (301~400)</option><option value="4">파트 5 (401~500)</option><option value="5">파트 6 (501~600)</option><option value="6">파트 7 (601~700)</option><option value="7">파트 8 (701~800)</option><option value="8">파트 9 (801~900)</option><option value="9">파트 10 (901~1000)</option><option value="10">파트 11 (1001~1100)</option><option value="11">파트 12 (1101~1123)</option></select><span id="partInfo">현재 범위 1123개</span></div>
 <div class="meta"><span id="progress">1 / 1123　★0</span><span>Space: 정답 / Enter·→: 다음 / ←·Backspace: 이전 / S: 섞기 / R: 앞뒤 / D: 다크</span></div>
-<div class="card" id="card"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">렌라쿠 (연락)[이을 련/이을 락]</div></div>
+<div class="card" id="card"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">れんらく (연락)[이을 련/이을 락]</div></div>
 <div class="controls">
 <button class="primary" id="showAnswer">정답 보기</button><button id="prevBtn">이전</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button><button id="favPlusBtn" disabled title="먼저 즐겨찾기에 추가해 줘" aria-pressed="false">☆ 즐겨찾기 +</button>
 <label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="favPlusOnly"> 즐겨찾기 +만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
@@ -218,8 +218,15 @@ function activeWords(){let a=selectedBase();if($("favPlusOnly").checked)a=a.filt
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function rebuild(x=true){deck=activeWords();if(x)shuffle(deck);index=0;shown=false;render()}
 function current(){return deck[index]||null}
+// Use the reading column and preserve the meaning and kanji explanation.
+function answerDetails(w){
+  const text=w[2].trim();
+  const start=text.search(/[（(]/);
+  return start>=0?text.slice(start):text;
+}
+function readingAnswer(w){return `${w[1]} ${answerDetails(w)}`.trim()}
 function koreanMeaning(answerText){const m=answerText.match(/\((.*?)\)/);return m?m[1]:answerText}
-function render(){clearTimeout(timer);const w=current();renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${w[2]}`:w[2];$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
+function render(){clearTimeout(timer);const w=current();renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
   timer=setTimeout(()=>{
     if(shown) nextWord();
     else toggleAnswer();
