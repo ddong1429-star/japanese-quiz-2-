@@ -21,6 +21,17 @@ select,button{border:1px solid var(--line);background:var(--soft);color:var(--te
 .editor{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:18px;z-index:10}.editor.open{display:flex}.panel{width:min(760px,100%);background:var(--card);border-radius:20px;padding:22px;box-shadow:var(--shadow)}textarea{width:100%;height:360px;resize:vertical;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:14px;padding:14px;font:14px/1.6 ui-monospace,Consolas,monospace}.panel-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}.hint{font-size:12px;color:var(--muted);margin:8px 0 12px}
 @media(max-width:600px){.word{font-size:42px}.answer{font-size:18px}h1{font-size:22px}.controls button{flex:1}.sub{display:none}.sync-status{display:none}.topbar{padding:0 12px}.topbtn{padding:8px 10px;font-size:12px}}
 button:disabled{opacity:.45;cursor:not-allowed}
+/* Individual kanji lookup, aligned to the right of the quiz card. */
+.card.has-kanji{display:grid;grid-template-columns:60px minmax(0,1fr) 60px;column-gap:12px;align-items:center}
+.card-content{min-width:0;overflow-wrap:anywhere}
+.card.has-kanji .card-content{grid-column:2;grid-row:1}
+.kanji-lookup{grid-column:3;grid-row:1;align-self:start;display:flex;flex-direction:column;align-items:center;gap:8px}
+.kanji-lookup[hidden]{display:none}
+.kanji-label{font-size:10px;color:var(--muted);white-space:nowrap}
+.kanji-link{display:flex;align-items:center;justify-content:center;width:52px;min-height:52px;border:1px solid var(--line);border-radius:12px;background:var(--soft);color:var(--text);font-size:32px;font-weight:800;line-height:1.3;text-decoration:none}
+.kanji-link:hover{border-color:var(--primary);color:var(--primary)}
+.kanji-link:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
+@media(max-width:600px){.card.has-kanji{grid-template-columns:0 minmax(0,1fr) 46px;column-gap:8px;padding:22px 14px}.kanji-link{width:44px;min-height:44px;font-size:28px}}
 </style></head>
 <body>
 <header class="topbar"><div><div class="title">일본어 단어 랜덤 퀴즈</div><div class="sub">100개 단위 파트 분할 · 즐겨찾기 기기 간 동기화</div></div><div class="top-actions"><span class="sync-status" id="syncStatus">로컬 저장 중</span><button class="topbtn secondary" id="loginBtn">Google 로그인</button><button class="topbtn" id="openEditor">단어 편집</button></div></header>
@@ -28,7 +39,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <h1>일본어 단어 랜덤 퀴즈</h1>
 <div class="toolbar"><strong>학습 범위</strong><select id="partSelect"><option value="all">전체 (1123개)</option><option value="0">파트 1 (1~100)</option><option value="1">파트 2 (101~200)</option><option value="2">파트 3 (201~300)</option><option value="3">파트 4 (301~400)</option><option value="4">파트 5 (401~500)</option><option value="5">파트 6 (501~600)</option><option value="6">파트 7 (601~700)</option><option value="7">파트 8 (701~800)</option><option value="8">파트 9 (801~900)</option><option value="9">파트 10 (901~1000)</option><option value="10">파트 11 (1001~1100)</option><option value="11">파트 12 (1101~1123)</option></select><span id="partInfo">현재 범위 1123개</span></div>
 <div class="meta"><span id="progress">1 / 1123　★0</span><span>Space: 정답 / Enter·→: 다음 / ←·Backspace: 이전 / S: 섞기 / R: 앞뒤 / D: 다크</span></div>
-<div class="card" id="card"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">れんらく (연락)[이을 련/이을 락]</div></div>
+<div class="card" id="card"><div class="card-content"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">れんらく (연락)[이을 련/이을 락]</div></div><aside class="kanji-lookup" id="kanjiLookup" aria-label="한자 검색" hidden></aside></div>
 <div class="controls">
 <button class="primary" id="showAnswer">정답 보기</button><button id="prevBtn">이전</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button><button id="favPlusBtn" disabled title="먼저 즐겨찾기에 추가해 줘" aria-pressed="false">☆ 즐겨찾기 +</button>
 <label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="favPlusOnly"> 즐겨찾기 +만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
@@ -226,7 +237,37 @@ function answerDetails(w){
 }
 function readingAnswer(w){return `${w[1]} ${answerDetails(w)}`.trim()}
 function koreanMeaning(answerText){const m=answerText.match(/\((.*?)\)/);return m?m[1]:answerText}
-function render(){clearTimeout(timer);const w=current();renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
+function renderKanjiLookup(w){
+  const panel=$("kanjiLookup");
+  panel.replaceChildren();
+  const chars=w&&(!$("reverse").checked||shown)
+    ? [...new Set(Array.from(w[0]).filter(ch=>/\p{Unified_Ideograph}/u.test(ch)))] : [];
+  panel.hidden=!chars.length;
+  $("card").classList.toggle("has-kanji",!!chars.length);
+  if(!chars.length)return;
+  const label=document.createElement("span");
+  label.className="kanji-label";
+  label.textContent="한자 검색 ↗";
+  panel.append(label);
+  for(const ch of chars){
+    const link=document.createElement("a");
+    link.className="kanji-link";
+    link.textContent=ch;
+    link.href="https://nihongokanji.com/?s="+encodeURIComponent(ch);
+    link.target="_blank";
+    link.rel="noopener noreferrer";
+    link.title=`${ch} 한자 검색 (새 탭)`;
+    link.setAttribute("aria-label",link.title);
+    link.addEventListener("click",e=>{
+      e.stopPropagation();
+      clearTimeout(timer);
+      $("autoPlay").checked=false;
+      stopSpeech();
+    });
+    panel.append(link);
+  }
+}
+function render(){clearTimeout(timer);const w=current();renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
   timer=setTimeout(()=>{
     if(shown) nextWord();
     else toggleAnswer();
@@ -287,6 +328,7 @@ $("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.check
 $("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
   if(e.repeat) return;
+  if(e.target.closest?.(".kanji-lookup")) return;
   if($("editor").classList.contains("open")) return;
 
   if(e.code==="Space"){
