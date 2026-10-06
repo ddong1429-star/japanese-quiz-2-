@@ -32,6 +32,14 @@ button:disabled{opacity:.45;cursor:not-allowed}
 .kanji-link:hover{border-color:var(--primary);color:var(--primary)}
 .kanji-link:focus-visible{outline:3px solid var(--primary);outline-offset:3px}
 @media(max-width:600px){.card.has-kanji{grid-template-columns:0 minmax(0,1fr) 46px;column-gap:8px;padding:22px 14px}.kanji-link{width:44px;min-height:44px;font-size:28px}}
+/* Current-word dictionary shortcut. */
+.card{position:relative;padding-top:60px}
+.naver-lookup{position:absolute;top:12px;left:14px;display:inline-flex;align-items:center;gap:5px;min-height:32px;padding:6px 9px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);font-size:12px;font-weight:750;text-decoration:none}
+.naver-lookup[hidden]{display:none}
+.naver-lookup strong{color:#03a854;font-size:14px;font-weight:900}
+.naver-lookup:hover{border-color:#03a854}
+.naver-lookup:focus-visible{outline:3px solid #03a854;outline-offset:3px}
+@media(max-width:600px){.card.has-kanji{padding-top:60px}}
 </style></head>
 <body>
 <header class="topbar"><div><div class="title">일본어 단어 랜덤 퀴즈</div><div class="sub">100개 단위 파트 분할 · 즐겨찾기 기기 간 동기화</div></div><div class="top-actions"><span class="sync-status" id="syncStatus">로컬 저장 중</span><button class="topbtn secondary" id="loginBtn">Google 로그인</button><button class="topbtn" id="openEditor">단어 편집</button></div></header>
@@ -39,7 +47,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <h1>일본어 단어 랜덤 퀴즈</h1>
 <div class="toolbar"><strong>학습 범위</strong><select id="partSelect"><option value="all">전체 (1123개)</option><option value="0">파트 1 (1~100)</option><option value="1">파트 2 (101~200)</option><option value="2">파트 3 (201~300)</option><option value="3">파트 4 (301~400)</option><option value="4">파트 5 (401~500)</option><option value="5">파트 6 (501~600)</option><option value="6">파트 7 (601~700)</option><option value="7">파트 8 (701~800)</option><option value="8">파트 9 (801~900)</option><option value="9">파트 10 (901~1000)</option><option value="10">파트 11 (1001~1100)</option><option value="11">파트 12 (1101~1123)</option></select><span id="partInfo">현재 범위 1123개</span></div>
 <div class="meta"><span id="progress">1 / 1123　★0</span><span>Space: 정답 / Enter·→: 다음 / ←·Backspace: 이전 / S: 섞기 / R: 앞뒤 / D: 다크</span></div>
-<div class="card" id="card"><div class="card-content"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">れんらく (연락)[이을 련/이을 락]</div></div><aside class="kanji-lookup" id="kanjiLookup" aria-label="한자 검색" hidden></aside></div>
+<div class="card" id="card"><a class="naver-lookup" id="naverLookup" target="_blank" rel="noopener noreferrer" aria-label="현재 단어 네이버 일본어 사전 검색 (새 탭)" title="현재 단어 네이버 일본어 사전 검색 (새 탭)" hidden><strong aria-hidden="true">N</strong> 네이버 사전 ↗</a><div class="card-content"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">れんらく (연락)[이을 련/이을 락]</div></div><aside class="kanji-lookup" id="kanjiLookup" aria-label="한자 검색" hidden></aside></div>
 <div class="controls">
 <button class="primary" id="showAnswer">정답 보기</button><button id="prevBtn">이전</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button><button id="favPlusBtn" disabled title="먼저 즐겨찾기에 추가해 줘" aria-pressed="false">☆ 즐겨찾기 +</button>
 <label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="favPlusOnly"> 즐겨찾기 +만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
@@ -237,6 +245,18 @@ function answerDetails(w){
 }
 function readingAnswer(w){return `${w[1]} ${answerDetails(w)}`.trim()}
 function koreanMeaning(answerText){const m=answerText.match(/\((.*?)\)/);return m?m[1]:answerText}
+function renderNaverLookup(w){
+  const link=$("naverLookup");
+  link.hidden=!w;
+  if(w)link.href="https://ja.dict.naver.com/#/search?query="+encodeURIComponent(w[0]);
+  else link.removeAttribute("href");
+}
+$("naverLookup").addEventListener("click",e=>{
+  e.stopPropagation();
+  clearTimeout(timer);
+  $("autoPlay").checked=false;
+  stopSpeech();
+});
 function renderKanjiLookup(w){
   const panel=$("kanjiLookup");
   panel.replaceChildren();
@@ -267,7 +287,7 @@ function renderKanjiLookup(w){
     panel.append(link);
   }
 }
-function render(){clearTimeout(timer);const w=current();renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
+function render(){clearTimeout(timer);const w=current();renderNaverLookup(w);renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
   timer=setTimeout(()=>{
     if(shown) nextWord();
     else toggleAnswer();
@@ -328,7 +348,7 @@ $("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.check
 $("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
   if(e.repeat) return;
-  if(e.target.closest?.(".kanji-lookup")) return;
+  if(e.target.closest?.(".kanji-lookup, .naver-lookup")) return;
   if($("editor").classList.contains("open")) return;
 
   if(e.code==="Space"){
@@ -363,4 +383,3 @@ initializeFirebaseSync();
 loadWords().catch(error=>{console.error(error);$("question").textContent="불러오기 실패";$("answer").textContent="words.txt 파일이 index.html과 같은 위치에 있는지 확인해.";$("answer").classList.remove("hidden")});
 </script>
 </body></html>
-<!-- redeploy -->
