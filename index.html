@@ -50,7 +50,8 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <div class="card" id="card"><a class="naver-lookup" id="naverLookup" target="_blank" rel="noopener noreferrer" aria-label="현재 단어 네이버 일본어 사전 검색 (새 탭)" title="현재 단어 네이버 일본어 사전 검색 (새 탭)" hidden><strong aria-hidden="true">N</strong> 네이버 사전 ↗</a><div class="card-content"><div class="word" id="question">連絡</div><div class="answer hidden" id="answer">れんらく (연락)[이을 련/이을 락]</div></div><aside class="kanji-lookup" id="kanjiLookup" aria-label="한자 검색" hidden></aside></div>
 <div class="controls">
 <button class="primary" id="showAnswer">정답 보기</button><button id="prevBtn">이전</button><button id="nextBtn">다음</button><button class="darkbtn" id="shuffleBtn">섞기</button><button id="favBtn">☆ 즐겨찾기</button><button id="favPlusBtn" disabled title="먼저 즐겨찾기에 추가해 줘" aria-pressed="false">☆ 즐겨찾기 +</button>
-<label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="favPlusOnly"> 즐겨찾기 +만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
+<button id="favPlusPlusBtn" disabled title="먼저 즐겨찾기 +에 추가해 줘" aria-pressed="false">☆ 즐겨찾기 ++</button>
+<label class="toggle"><input type="checkbox" id="favPlusPlusOnly"> 즐겨찾기 ++만</label><label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="favPlusOnly"> 즐겨찾기 +만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
 <label class="toggle"><input type="checkbox" id="autoPlay"> 자동 진행</label><select id="delay"><option value="2000">2초</option><option value="3000" selected="">3초</option><option value="5000">5초</option>
 <option value="10000">10초</option></select>
 <label class="toggle"><input type="checkbox" id="ttsEnabled"> TTS 읽기</label>
@@ -90,6 +91,7 @@ let defaultWords = [];
 let words = [];
 let favorites = new Set(JSON.parse(localStorage.getItem("jpQuizFavs_txt_v2") || "[]"));
 let favoritesPlus = new Set(JSON.parse(localStorage.getItem("jpQuizFavsPlus_txt_v1") || "[]").filter(key=>favorites.has(key)));
+let favoritesPlusPlus = new Set(JSON.parse(localStorage.getItem("jpQuizFavsPlusPlus_txt_v1") || "[]").filter(key=>favoritesPlus.has(key)));
 let deck = [], index = 0, shown = false, history = [], timer = null;
 const $ = id => document.getElementById(id);
 
@@ -99,6 +101,7 @@ function favoritesDocRef(uid){ return doc(db, "users", uid, "quizData", "favorit
 async function saveFavorites(){
   localStorage.setItem("jpQuizFavs_txt_v2", JSON.stringify([...favorites]));
   localStorage.setItem("jpQuizFavsPlus_txt_v1", JSON.stringify([...favoritesPlus]));
+  localStorage.setItem("jpQuizFavsPlusPlus_txt_v1", JSON.stringify([...favoritesPlusPlus]));
   if(!signedInUser || !db || applyingRemoteFavorites){
     if(!signedInUser) setSyncStatus(FIREBASE_CONFIGURED ? "로그인하면 동기화" : "Firebase 설정 필요");
     return;
@@ -107,7 +110,7 @@ async function saveFavorites(){
     setSyncStatus("동기화 중…");
     await setDoc(favoritesDocRef(signedInUser.uid), {
       items:[...favorites],
-      plusItems:[...favoritesPlus],
+      plusItems:[...favoritesPlus],plusPlusItems:[...favoritesPlusPlus],
       updatedAt:serverTimestamp()
     }, {merge:true});
     setSyncStatus(`동기화 완료 · ${signedInUser.displayName || signedInUser.email || "로그인됨"}`);
@@ -131,7 +134,7 @@ async function startFavoritesSync(user){
   try{
     const first=await getDoc(ref);
     if(!first.exists()){
-      await setDoc(ref,{items:[...favorites],plusItems:[...favoritesPlus],updatedAt:serverTimestamp()});
+      await setDoc(ref,{items:[...favorites],plusItems:[...favoritesPlus],plusPlusItems:[...favoritesPlusPlus],updatedAt:serverTimestamp()});
     }
     unsubscribeFavorites=onSnapshot(ref,snap=>{
       if(!snap.exists())return;
@@ -139,6 +142,8 @@ async function startFavoritesSync(user){
       applyingRemoteFavorites=true;
       favorites=new Set(items);
       favoritesPlus=new Set((Array.isArray(snap.data().plusItems)?snap.data().plusItems:[]).filter(key=>favorites.has(key)));
+      favoritesPlusPlus=new Set((Array.isArray(snap.data().plusPlusItems)?snap.data().plusPlusItems:[]).filter(key=>favoritesPlus.has(key)));
+      localStorage.setItem("jpQuizFavsPlusPlus_txt_v1",JSON.stringify([...favoritesPlusPlus]));
       localStorage.setItem("jpQuizFavsPlus_txt_v1",JSON.stringify([...favoritesPlus]));
       localStorage.setItem("jpQuizFavs_txt_v2",JSON.stringify(items));
       applyingRemoteFavorites=false;
@@ -233,7 +238,7 @@ async function loadWords() {
 
 function buildPartOptions(){const s=$("partSelect"),cur=s.value||"all",parts=Math.ceil(words.length/100);s.innerHTML=`<option value="all">전체 (${words.length}개)</option>`;for(let i=0;i<parts;i++){const a=i*100+1,b=Math.min((i+1)*100,words.length);s.insertAdjacentHTML("beforeend",`<option value="${i}">파트 ${i+1} (${a}~${b})</option>`)}if([...s.options].some(o=>o.value===cur))s.value=cur}
 function selectedBase(){const v=$("partSelect").value;if(v==="all")return [...words];const i=Number(v);return words.slice(i*100,(i+1)*100)}
-function activeWords(){let a=selectedBase();if($("favPlusOnly").checked)a=a.filter(w=>favoritesPlus.has(w[0]));else if($("favOnly").checked)a=a.filter(w=>favorites.has(w[0]));return a}
+function activeWords(){let a=selectedBase();if($("favPlusPlusOnly").checked)a=a.filter(w=>favoritesPlusPlus.has(w[0]));else if($("favPlusOnly").checked)a=a.filter(w=>favoritesPlus.has(w[0]));else if($("favOnly").checked)a=a.filter(w=>favorites.has(w[0]));return a}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function rebuild(x=true){deck=activeWords();if(x)shuffle(deck);index=0;shown=false;render()}
 function current(){return deck[index]||null}
@@ -287,7 +292,7 @@ function renderKanjiLookup(w){
     panel.append(link);
   }
 }
-function render(){clearTimeout(timer);const w=current();renderNaverLookup(w);renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
+function render(){clearTimeout(timer);const w=current();renderNaverLookup(w);renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
   timer=setTimeout(()=>{
     if(shown) nextWord();
     else toggleAnswer();
@@ -310,6 +315,12 @@ function renderFavoriteButtons(w){
   $("favBtn").textContent=favorite?"★ 즐겨찾기":"☆ 즐겨찾기";
   $("favBtn").classList.toggle("active",favorite);
   $("favBtn").setAttribute("aria-pressed",String(favorite));
+  const plusPlus=!!w&&favoritesPlusPlus.has(w[0]);
+  $("favPlusPlusBtn").disabled=!plus;
+  $("favPlusPlusBtn").textContent=plusPlus?"★ 즐겨찾기 ++":"☆ 즐겨찾기 ++";
+  $("favPlusPlusBtn").classList.toggle("active",plusPlus);
+  $("favPlusPlusBtn").setAttribute("aria-pressed",String(plusPlus));
+  $("favPlusPlusBtn").title=plus?"가장 헷갈리는 단어로 표시하거나 해제":"먼저 즐겨찾기 +에 추가해 줘";
   $("favPlusBtn").disabled=!favorite;
   $("favPlusBtn").textContent=plus?"★ 즐겨찾기 +":"☆ 즐겨찾기 +";
   $("favPlusBtn").classList.toggle("active",plus);
@@ -317,7 +328,7 @@ function renderFavoriteButtons(w){
   $("favPlusBtn").title=favorite?"더 헷갈리는 단어로 표시하거나 해제":"먼저 즐겨찾기에 추가해 줘";
 }
 function refreshFavoriteView(){
-  if($("favOnly").checked||$("favPlusOnly").checked){
+  if($("favOnly").checked||$("favPlusOnly").checked||$("favPlusPlusOnly").checked){
     const key=current()?.[0], allowed=new Set(activeWords().map(w=>w[0]));
     deck=deck.filter(w=>allowed.has(w[0]));
     const present=new Set(deck.map(w=>w[0]));
@@ -330,20 +341,37 @@ function refreshFavoriteView(){
 }
 function toggleFavorite(){
   const w=current();if(!w)return;
-  if(favorites.has(w[0])){favorites.delete(w[0]);favoritesPlus.delete(w[0]);}
+  if(favorites.has(w[0])){favorites.delete(w[0]);favoritesPlus.delete(w[0]);favoritesPlusPlus.delete(w[0]);}
   else favorites.add(w[0]);
   refreshFavoriteView();saveFavorites();
 }
 function toggleFavoritePlus(){
   const w=current();if(!w||!favorites.has(w[0]))return;
-  favoritesPlus.has(w[0])?favoritesPlus.delete(w[0]):favoritesPlus.add(w[0]);
+  if(favoritesPlus.has(w[0])){favoritesPlus.delete(w[0]);favoritesPlusPlus.delete(w[0]);}
+  else favoritesPlus.add(w[0]);
+  refreshFavoriteView();saveFavorites();
+}
+function toggleFavoritePlusPlus(){
+  const w=current();if(!w||!favoritesPlus.has(w[0]))return;
+  favoritesPlusPlus.has(w[0])?favoritesPlusPlus.delete(w[0]):favoritesPlusPlus.add(w[0]);
   refreshFavoriteView();saveFavorites();
 }
 function applyDark(on){document.body.classList.toggle("dark",on);localStorage.setItem("jpQuizDark_txt_v2",on?"1":"0")}
 function openEditor(){$("wordInput").value=words.map(w=>w.join(" | ")).join("\n");$("editor").classList.add("open")}
 function saveWords(){const p=$("wordInput").value.split("\n").map(x=>x.trim()).filter(Boolean).map(x=>x.split("|").map(y=>y.trim())).filter(x=>x.length>=3&&x[0]&&x[1]&&x[2]).map(x=>[x[0],x[1],x.slice(2).join(" | ")]);if(!p.length){alert("올바른 단어가 없어.");return}words=p;buildPartOptions();$("editor").classList.remove("open");rebuild(true);alert("이 기기에서만 임시 적용됐어. 모든 기기에 적용하려면 GitHub의 words.txt를 수정해야 해.")}
 
-$("showAnswer").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favPlusBtn").onclick=toggleFavoritePlus;$("favOnly").onchange=()=>{if($("favOnly").checked)$("favPlusOnly").checked=false;rebuild(true)};$("favPlusOnly").onchange=()=>{if($("favPlusOnly").checked)$("favOnly").checked=false;rebuild(true)};$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;
+$("card").addEventListener("click",e=>{
+  if(e.target.closest("a, button, input, select"))return;
+  if(current()&&!shown){shown=true;render();}
+});
+$("favPlusPlusBtn").onclick=toggleFavoritePlusPlus;
+for(const id of ["favOnly","favPlusOnly","favPlusPlusOnly"]){
+  $(id).onchange=()=>{
+    if($(id).checked)for(const other of ["favOnly","favPlusOnly","favPlusPlusOnly"]){if(other!==id)$(other).checked=false;}
+    rebuild(true);
+  };
+}
+$("showAnswer").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favPlusBtn").onclick=toggleFavoritePlus;$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;
 $("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.checked?"1":"0");lastSpokenToken="";if(e.target.checked)speakCurrent(true);else stopSpeech()};
 $("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
