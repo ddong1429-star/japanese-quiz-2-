@@ -294,8 +294,7 @@ function renderKanjiLookup(w){
 }
 function render(){clearTimeout(timer);const w=current();renderNaverLookup(w);renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked){
   timer=setTimeout(()=>{
-    if(shown) nextWord();
-    else toggleAnswer();
+    nextWord();
   },Number($("delay").value));
 }}
 function toggleAnswer(){shown=!shown;render()}
@@ -371,7 +370,7 @@ for(const id of ["favOnly","favPlusOnly","favPlusPlusOnly"]){
     rebuild(true);
   };
 }
-$("showAnswer").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favPlusBtn").onclick=toggleFavoritePlus;$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=render;$("delay").onchange=render;
+$("showAnswer").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favPlusBtn").onclick=toggleFavoritePlus;$("reverse").onchange=()=>{shown=false;render()};$("partSelect").onchange=()=>rebuild(true);$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=()=>{if($("autoPlay").checked)shown=false;render()};$("delay").onchange=render;
 $("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.checked?"1":"0");lastSpokenToken="";if(e.target.checked)speakCurrent(true);else stopSpeech()};
 $("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
