@@ -37,6 +37,12 @@ select,button{border:1px solid var(--line);background:var(--soft);color:var(--te
 .editor{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:18px;z-index:10}.editor.open{display:flex}.panel{width:min(760px,100%);background:var(--card);border-radius:20px;padding:22px;box-shadow:var(--shadow)}textarea{width:100%;height:360px;resize:vertical;border:1px solid var(--line);background:var(--bg);color:var(--text);border-radius:14px;padding:14px;font:14px/1.6 ui-monospace,Consolas,monospace}.panel-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:12px}.hint{font-size:12px;color:var(--muted);margin:8px 0 12px}
 @media(max-width:600px){.word{font-size:42px}.answer{font-size:18px}h1{font-size:22px}.controls button{flex:1}.sub{display:none}.sync-status{display:none}.topbar{padding:0 12px}.topbtn{padding:8px 10px;font-size:12px}}
 button:disabled{opacity:.45;cursor:not-allowed}
+.tts-settings{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--line)}
+.tts-field{display:flex;align-items:center;gap:7px;font-size:13px;min-width:0}
+.tts-voice-field{flex:1 1 260px}.tts-voice-field select{width:100%;min-width:0}
+.tts-settings select,.tts-settings button{max-width:100%;font-size:13px}
+.tts-status{flex-basis:100%;margin:0;font-size:12px;line-height:1.6;color:var(--muted);overflow-wrap:anywhere}
+@media(max-width:600px){.tts-voice-field{flex-basis:100%}.tts-field select{min-width:0}.tts-settings button{flex:1}.tts-settings{gap:10px 8px}}
 /* Individual kanji lookup, aligned to the right of the quiz card. */
 .card.has-kanji{display:grid;grid-template-columns:60px minmax(0,1fr) 60px;column-gap:12px;align-items:center}
 .card-content{min-width:0;overflow-wrap:anywhere}
@@ -77,8 +83,14 @@ button:disabled{opacity:.45;cursor:not-allowed}
 <label class="toggle"><input type="checkbox" id="favPlusPlusOnly"> 즐겨찾기 ++만</label><label class="toggle"><input type="checkbox" id="favOnly"> 즐겨찾기만</label><label class="toggle"><input type="checkbox" id="favPlusOnly"> 즐겨찾기 +만</label><label class="toggle"><input type="checkbox" id="reverse"> 한국어 먼저</label><label class="toggle"><input type="checkbox" id="darkMode"> 다크모드</label>
 <label class="toggle"><input type="checkbox" id="autoPlay"> 자동 진행</label><select id="delay"><option value="2000">2초</option><option value="3000" selected="">3초</option><option value="5000">5초</option>
 <option value="10000">10초</option></select>
+</div>
+<div class="tts-settings" id="ttsSettings" role="group" aria-label="일본어 음성 설정">
 <label class="toggle"><input type="checkbox" id="ttsEnabled"> TTS 읽기</label>
-<select id="ttsRate"><option value="0.8">0.8배</option><option value="1" selected>1.0배</option><option value="1.2">1.2배</option></select>
+<label class="tts-field tts-voice-field">목소리 <select id="ttsVoice" aria-describedby="ttsStatus"><option value="auto">자동 선택</option></select></label>
+<label class="tts-field">속도 <select id="ttsRate"><option value="0.8">0.8배</option><option value="0.9">0.9배</option><option value="1" selected>1.0배</option><option value="1.1">1.1배</option><option value="1.2">1.2배</option></select></label>
+<label class="tts-field">발음 기준 <select id="ttsTextMode"><option value="reading">요미가나 · 읽는 법 우선</option><option value="word">일본어 표기 · 억양 비교</option></select></label>
+<button type="button" id="ttsPreview">목소리 미리 듣기</button><button type="button" id="ttsReplay">단어 다시 듣기</button>
+<p class="tts-status" id="ttsStatus" role="status" aria-live="polite">일본어 음성을 확인하는 중…</p>
 </div>
 <div class="history-head"><span>이전 단어 (최근 0 / 20)</span><button id="clearHistory" style="padding:4px 9px">비우기</button></div><div class="history" id="history">아직 히스토리가 없어. ‘다음’을 눌러 진행해 봐.</div>
 </section></main>
@@ -219,27 +231,108 @@ async function initializeFirebaseSync(){
 
 const TTS_ENABLED_KEY="jpQuizTtsEnabled_v1";
 const TTS_RATE_KEY="jpQuizTtsRate_v1";
-let lastSpokenToken="";
-
-function getJapaneseVoice(){
-  const voices=speechSynthesis.getVoices();
-  return voices.find(v=>/^ja[-_]/i.test(v.lang)&&/Google|Microsoft|Kyoko|Haruka|Otoya|Nanami/i.test(v.name))
-      || voices.find(v=>/^ja[-_]/i.test(v.lang))
-      || null;
+const TTS_VOICE_KEY="jpQuizTtsVoice_v1";
+const TTS_TEXT_MODE_KEY="jpQuizTtsTextMode_v1";
+const ttsSupported="speechSynthesis" in window&&"SpeechSynthesisUtterance" in window;
+let lastSpokenToken="", japaneseVoices=[], speechSequence=0, activeUtterance=null, speechPreviewing=false;
+let preferredVoice=localStorage.getItem(TTS_VOICE_KEY)||"auto";
+function voiceKey(v){return JSON.stringify([v.voiceURI||v.name,v.lang,v.name])}
+function voicePriority(v){
+  // A name-based preference, not a guarantee of voice quality.
+  if(/natural|neural|premium|enhanced|ナチュラル|高品質/i.test(v.name))return 300;
+  if(/Google/i.test(v.name))return 200;
+  return v.default?100:0;
 }
-function stopSpeech(){if("speechSynthesis" in window)speechSynthesis.cancel()}
-function speakCurrent(force=false){
-  if(!("speechSynthesis" in window)||!$("ttsEnabled").checked)return;
-  const w=current(); if(!w)return;
-  const token=`${index}:${w[0]}:${w[1]}`;
-  if(!force&&token===lastSpokenToken)return;
+function setTtsStatus(text){$("ttsStatus").textContent=text}
+function getJapaneseVoice(){
+  return japaneseVoices.find(v=>voiceKey(v)===preferredVoice)||japaneseVoices[0]||null;
+}
+function describeVoice(){
+  const voice=getJapaneseVoice();
+  if(!voice){setTtsStatus("일본어 음성을 찾지 못했어. 기기의 일본어 음성을 설치한 뒤 다시 열어 줘.");return;}
+  const missing=preferredVoice!=="auto"&&!japaneseVoices.some(v=>voiceKey(v)===preferredVoice);
+  setTtsStatus(`${missing?"저장한 목소리가 없어 자동 선택했어. ":""}현재: ${voice.name}${voice.localService===false?" · 인터넷 연결 필요":""} · 제공되는 목소리는 기기마다 달라.`);
+}
+function refreshJapaneseVoices(){
+  if(!ttsSupported){
+    for(const id of ["ttsEnabled","ttsVoice","ttsRate","ttsTextMode","ttsPreview","ttsReplay"])$(id).disabled=true;
+    setTtsStatus("이 브라우저에서는 음성 읽기를 지원하지 않아.");
+    return;
+  }
+  const unique=new Map();
+  for(const v of speechSynthesis.getVoices())if(/^ja(?:[-_]|$)/i.test(v.lang))unique.set(voiceKey(v),v);
+  japaneseVoices=[...unique.values()].sort((a,b)=>voicePriority(b)-voicePriority(a)||a.name.localeCompare(b.name));
+  const select=$("ttsVoice");
+  select.replaceChildren();
+  function addVoice(value,label){const option=document.createElement("option");option.value=value;option.textContent=label;select.append(option);}
+  addVoice("auto",japaneseVoices.length?`자동 선택 · ${japaneseVoices[0].name}`:"일본어 음성 없음");
+  for(const v of japaneseVoices)addVoice(voiceKey(v),`${v.name}${v.localService===false?" · 온라인":""}`);
+  select.value=japaneseVoices.some(v=>voiceKey(v)===preferredVoice)?preferredVoice:"auto";
+  select.disabled=!japaneseVoices.length;
+  $("ttsPreview").disabled=!japaneseVoices.length;
+  $("ttsReplay").disabled=!japaneseVoices.length||!current();
+  describeVoice();
+}
+function stopSpeech(){
+  speechSequence++;
+  activeUtterance=null;
+  speechPreviewing=false;
+  if(ttsSupported)speechSynthesis.cancel();
+}
+function speechText(w){
+  // Keep the supplied reading as the default so ambiguous kanji do not change pronunciation.
+  return String($("ttsTextMode").value==="word"?(w[0]||w[1]):(w[1]||w[0]))
+    .replace(/[～〜~…⋯★☆]/g," ").replace(/\s+/g," ").trim();
+}
+function playJapanese(text,{preview=false,token=""}={}){
+  if(!ttsSupported)return;
+  const voice=getJapaneseVoice();
+  if(!voice){refreshJapaneseVoices();return;}
   stopSpeech();
-  const u=new SpeechSynthesisUtterance(w[1]||w[0]);
-  u.lang="ja-JP";
+  const sequence=speechSequence;
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang=voice.lang||"ja-JP";
+  u.voice=voice;
   u.rate=Number($("ttsRate").value||1);
-  const voice=getJapaneseVoice(); if(voice)u.voice=voice;
-  lastSpokenToken=token;
-  speechSynthesis.speak(u);
+  u.pitch=1;
+  u.volume=1;
+  activeUtterance=u;
+  speechPreviewing=preview;
+  if(preview)clearTimeout(timer);
+  if(token)lastSpokenToken=token;
+  function finish(error){
+    if(sequence!==speechSequence)return;
+    activeUtterance=null;
+    speechPreviewing=false;
+    if(error&&!['canceled','interrupted'].includes(error)){
+      setTtsStatus(error==="not-allowed"?"‘단어 다시 듣기’를 눌러 음성 재생을 시작해 줘.":"음성을 재생하지 못했어. 다른 목소리를 선택하거나 ‘단어 다시 듣기’를 눌러 줘.");
+    }
+    // A preview pauses automatic progression only for the duration of its audio.
+    if(preview&&$("autoPlay").checked&&$("partMenu").hidden){
+      clearTimeout(timer);timer=setTimeout(nextWord,Number($("delay").value));
+    }
+  }
+  u.onend=()=>finish();
+  u.onerror=e=>finish(e.error);
+  try{speechSynthesis.speak(u);}catch{finish("synthesis-failed");}
+}
+function speakCurrent(force=false,manual=false){
+  if(!ttsSupported||(!manual&&!$("ttsEnabled").checked))return;
+  if(!manual&&(speechPreviewing||!$("partMenu").hidden))return;
+  const w=current();if(!w)return;
+  const text=speechText(w);if(!text)return;
+  const token=JSON.stringify([index,w[0],w[1],preferredVoice,$("ttsRate").value,$("ttsTextMode").value]);
+  if(!force&&token===lastSpokenToken)return;
+  playJapanese(text,{token});
+}
+function previewVoice(){
+  playJapanese("こんにちは。今日は日本語の勉強をしましょう。",{preview:true});
+}
+function onTtsPreferenceChange(){
+  stopSpeech();lastSpokenToken="";describeVoice();
+  if($("ttsEnabled").checked)speakCurrent(true);
+  // Restart the normal timer if a preference change interrupted a preview.
+  if($("autoPlay").checked)render();
 }
 
 
@@ -423,7 +516,7 @@ function renderKanjiLookup(w){
     panel.append(link);
   }
 }
-function render(){clearTimeout(timer);const w=current();renderNaverLookup(w);renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked&&$("partMenu").hidden){
+function render(){clearTimeout(timer);const w=current();$("ttsReplay").disabled=!ttsSupported||!japaneseVoices.length||!w;renderNaverLookup(w);renderKanjiLookup(w);renderFavoriteButtons(w);$("partInfo").textContent=`현재 범위 ${selectedBase().length}개`;if(!w){$("question").textContent="단어 없음";$("answer").textContent="이 범위에 표시할 단어가 없어.";$("answer").classList.remove("hidden");$("progress").textContent=`0 / 0　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;return}const rev=$("reverse").checked;$("question").textContent=rev?koreanMeaning(w[2]):w[0];$("answer").textContent=rev?`${w[0]}（${w[1]}） · ${answerDetails(w)}`:readingAnswer(w);$("answer").classList.toggle("hidden",!shown);$("showAnswer").textContent=shown?"정답 숨기기":"정답 보기";$("favBtn").textContent=favorites.has(w[0])?"★ 즐겨찾기":"☆ 즐겨찾기";$("favBtn").classList.toggle("active",favorites.has(w[0]));$("progress").textContent=`${index+1} / ${deck.length}　★${favorites.size}　★+${favoritesPlus.size}　★++${favoritesPlusPlus.size}`;updateHistory();if(!shown)speakCurrent();if($("autoPlay").checked&&$("partMenu").hidden&&!speechPreviewing){
   timer=setTimeout(()=>{
     nextWord();
   },Number($("delay").value));
@@ -502,15 +595,25 @@ for(const id of ["favOnly","favPlusOnly","favPlusPlusOnly"]){
   };
 }
 $("showAnswer").onclick=toggleAnswer;$("prevBtn").onclick=previousWord;$("nextBtn").onclick=nextWord;$("shuffleBtn").onclick=()=>rebuild(true);$("favBtn").onclick=toggleFavorite;$("favPlusBtn").onclick=toggleFavoritePlus;$("reverse").onchange=()=>{shown=false;render()};$("darkMode").onchange=e=>applyDark(e.target.checked);$("autoPlay").onchange=()=>{if($("autoPlay").checked)shown=false;render()};$("delay").onchange=render;
-$("ttsEnabled").onchange=e=>{localStorage.setItem(TTS_ENABLED_KEY,e.target.checked?"1":"0");lastSpokenToken="";if(e.target.checked)speakCurrent(true);else stopSpeech()};
-$("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);lastSpokenToken="";if($("ttsEnabled").checked)speakCurrent(true)};$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
+$("ttsEnabled").onchange=e=>{
+  localStorage.setItem(TTS_ENABLED_KEY,e.target.checked?"1":"0");
+  stopSpeech();lastSpokenToken="";
+  if(e.target.checked){refreshJapaneseVoices();speakCurrent(true);}
+  if($("autoPlay").checked)render();
+};
+$("ttsRate").onchange=e=>{localStorage.setItem(TTS_RATE_KEY,e.target.value);onTtsPreferenceChange();};
+$("ttsVoice").onchange=e=>{preferredVoice=e.target.value;localStorage.setItem(TTS_VOICE_KEY,preferredVoice);onTtsPreferenceChange();};
+$("ttsTextMode").onchange=e=>{localStorage.setItem(TTS_TEXT_MODE_KEY,e.target.value);onTtsPreferenceChange();};
+$("ttsPreview").onclick=previewVoice;
+$("ttsReplay").onclick=()=>{speakCurrent(true,true);if($("autoPlay").checked)render();};
+$("clearHistory").onclick=()=>{history=[];updateHistory()};$("openEditor").onclick=openEditor;$("closeEditor").onclick=()=>$("editor").classList.remove("open");$("saveWords").onclick=saveWords;$("editor").onclick=e=>{if(e.target===$("editor"))$("editor").classList.remove("open")};
 document.addEventListener("keydown",e=>{
   if(e.repeat) return;
   if(!$("partMenu").hidden||e.target.closest?.("#partPicker")){
     if(e.key==="Escape"&&!$("partMenu").hidden){e.preventDefault();closePartMenu(true);}
     return;
   }
-  if(e.target.closest?.(".kanji-lookup, .naver-lookup")) return;
+  if(e.target.closest?.(".kanji-lookup, .naver-lookup, #ttsSettings")) return;
   if($("editor").classList.contains("open")) return;
 
   if(e.code==="Space"){
@@ -540,7 +643,14 @@ const ds=localStorage.getItem("jpQuizDark_txt_v2")==="1";$("darkMode").checked=d
 $("ttsEnabled").checked=localStorage.getItem(TTS_ENABLED_KEY)==="1";
 const savedRate=localStorage.getItem(TTS_RATE_KEY);
 if(savedRate&&[...$("ttsRate").options].some(o=>o.value===savedRate))$("ttsRate").value=savedRate;
-if("speechSynthesis" in window){speechSynthesis.getVoices();speechSynthesis.onvoiceschanged=()=>speechSynthesis.getVoices()}
+$("ttsTextMode").value=localStorage.getItem(TTS_TEXT_MODE_KEY)==="word"?"word":"reading";
+refreshJapaneseVoices();
+if(ttsSupported){
+  speechSynthesis.addEventListener("voiceschanged",()=>{
+    refreshJapaneseVoices();
+    if(!lastSpokenToken)speakCurrent();
+  });
+}
 initializeFirebaseSync();
 loadWords().catch(error=>{console.error(error);$("question").textContent="불러오기 실패";$("answer").textContent="words.txt 파일이 index.html과 같은 위치에 있는지 확인해.";$("answer").classList.remove("hidden")});
 </script>
